@@ -1,6 +1,6 @@
-Approximation of second order derivative by dividing nodal point space twice. 
-  1st: by s+1 times uniformally
-  2nd: by k times
+Approximation of second order derivative by dividing nodal point space twice.
+  - first by s+1 times uniformally
+  - then by k times
 
 
 ##### Docs
