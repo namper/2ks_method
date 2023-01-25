@@ -1,9 +1,11 @@
 Approximation of second order derivative by dividing nodal point space twice.
-  - first by s+1 times uniformally
-  - then by k times
+  - first by 2s+1 times [uniformally]
+  - then by k times [uniformally]
+ 
+** uniformallity is not required but simplifies computations.
 
-
-##### Docs
+---
+##### API Docs
 
 ```python 
 # 2ks+1 method approximate
