@@ -62,11 +62,11 @@ def sigma(b_matrix, phi, k: int, s: int):
     """computes sigma at ks+1 """
 
     s1 = 0
-    for t in range(0, k-2):
+    for t in range(1, k-1):
         _s = 0
         for j in range(1, 2*s-1):
-            a = b_matrix[s][j-1]
-            b = phi[(t-1)*s+j-1]
+            a = b_matrix[s][j]
+            b = phi[(t-1)*s+j]
             _s += a*b
 
         s1 += t * _s
@@ -81,11 +81,11 @@ def sigma(b_matrix, phi, k: int, s: int):
     s2 = k * s2
 
     s3 = 0
-    for t in range(0, k-2):
+    for t in range(1, k-1):
         _s = 0
         for j in range(1, 2*s-1):
-            a = b_matrix[s][j-1]
-            b = phi[(2*k-1-t)*s+j-1]
+            a = b_matrix[s][j]
+            b = phi[(2*k-1-t)*s+j]
             _s += a*b
 
         s3 += t * _s
@@ -93,16 +93,74 @@ def sigma(b_matrix, phi, k: int, s: int):
     return s1 + s2 + s3
 
 
-def approximate(order=2, initial_phi=0, s=2, k=4, lim_0=1/2, lim_1=1/4):
-    p = 2*s+1
+def big_sigma(b_matrix, phi, t: int, s: int):
+    a = 2 / (t + 1)
+
+    sigm = 0
+
+    for r in range(1, t):
+        _s = 0
+        for j in range(1, 2*s-1):
+            b = b_matrix[s][j]
+            c = phi[(2*s-1)*s+j]
+            _s = b * c
+
+        sigm += r * _s
+
+    return a * sigm
+
+
+def approximation_iteration(phi, b_matrix, s, k, lim_0, lim_1):
+    # setup y
+    y = np.zeros(shape=2*s*k+1, dtype=float)
+    y[0] = lim_0
+    y[-1] = lim_1
+    mid_point = 0.5 * (lim_0 + lim_1) + sigma(b_matrix, phi, k, s)
+    y[k*s] = mid_point
+
+    # backwards propagate odd nodes
+    for t in range(2*k-1, 0, -1):
+        y[t*s] = t/(t+1)*y[(t+1)*s] + 1/(t+1)*lim_0 + big_sigma(b_matrix, phi, t, s)
+
+    # forwards propagate even nodes
+    for t in range(1, 2*k-1):
+        for i in range(2, s+2):
+            # for odd nodes skip as they are already propagated
+            if ((t-1)*s+i) % 2 == 1:
+                continue
+
+            # skip out of bounds
+            if (t == 2*k - 2) and (i == s+1):
+                continue
+
+            a = (2*s - (i-1)) / (2*s)
+            b = y[(t-1)*s]
+
+            c = (i-1)/(2*s)
+            d = y[(t+1)*s]
+
+            e = 0
+            for j in range(2, 2*s):
+                e += b_matrix[i-1][j-1]*phi[(t-1)*s+j-1]
+
+            y[(t-1)*s+i-1] = a*b + c*d + e
+
+    return y
+
+
+def approximate(number_of_iterations=1, initial_phi=0, s=2, k=4, lim_0=1/2, lim_1=1/4):
     initial_nodal_points = compute_initial_nodal_points(s)
     phi = np.array([initial_phi for _ in range(2*s*k+1)])
-    b_matrix = compute_b_matrix(p, initial_nodal_points)
+    b_matrix = compute_b_matrix(2*s+1, initial_nodal_points)
 
-    mid_point = 0.5 * (lim_0 + lim_1) + sigma(b_matrix, phi, k, s)
-
-    print("mid_point:=", mid_point)
+    for iteration_step in range(number_of_iterations):
+        print(f"Iteration {iteration_step}")
+        phi = approximation_iteration(
+            phi, b_matrix, s, k, lim_0, lim_1
+        )
+        print("phi :=", phi)
+        print("mid :=", phi[k*s])
 
 
 if __name__ == '__main__':
-    approximate(order=2, initial_phi=0, s=2, k=4)
+    approximate(number_of_iterations=1, initial_phi=0, s=2, k=4)
