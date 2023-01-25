@@ -1,4 +1,7 @@
-Approximation of second order derivative 2ks+1 points
+Approximation of second order derivative by dividing nodal point space twice. 
+  1st: by s+1 times uniformally
+  2nd: by k times
+
 
 ##### Docs
 
