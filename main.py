@@ -71,8 +71,7 @@ def sigma(b_matrix, phi, k: int, s: int):
     s2 = 0
     for j in range(1, 2*s-1):
         a = b_matrix[s][j-1]
-        b = 0  # @HACK: Needs to be fixed mid sum seems to be dependent on t but t is undefined here
-
+        b = phi[(k-1)*s+j-1]
         s2 += a*b
 
     s2 = k * s2
