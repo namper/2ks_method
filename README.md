@@ -9,6 +9,7 @@ Approximation of second order derivative by dividing nodal point space twice.
 
 ```python 
 # 2ks+1 method approximate
+
 def rhs(y, x):
     return 2*y**2/(1+x)
 
