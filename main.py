@@ -1,6 +1,7 @@
-from typing import Callable
+from typing import Callable, TypeAlias, TypeVar
 import numpy as np
 from scipy.integrate import quad
+from functools import partial
 
 
 def lagrangian_polynomial(p: int, j: int, nodal_points: np.ndarray) -> Callable[[float], float]:
@@ -52,10 +53,6 @@ def compute_b_matrix(p: int, nodal_points):
             b_matrix[i][j] = a * (b*c - d*e)
 
     return b_matrix
-
-
-def rhs(y, x):
-    return 2*y**2 / (1 + x)
 
 
 def sigma(b_matrix, phi, k: int, s: int):
@@ -110,7 +107,7 @@ def big_sigma(b_matrix, phi, t: int, s: int):
     return a * sigm
 
 
-def approximation_iteration(phi, b_matrix, s, k, lim_0, lim_1):
+def _2ks_iter(phi, b_matrix, s, k, lim_0, lim_1):
     # setup y
     y = np.zeros(shape=2*s*k+1, dtype=float)
     y[0] = lim_0
@@ -148,19 +145,45 @@ def approximation_iteration(phi, b_matrix, s, k, lim_0, lim_1):
     return y
 
 
-def approximate(number_of_iterations=1, initial_phi=0, s=2, k=4, lim_0=1/2, lim_1=1/4):
+RHS: TypeAlias = Callable[[float, float], float]
+
+
+def two_ks_method_approx(
+    rhs: RHS,
+    number_of_iterations=1,
+    s=2,
+    k=4,
+    lim_0=1/2,
+    lim_1=1/4,
+    verbose=True,
+):
     initial_nodal_points = compute_initial_nodal_points(s)
-    phi = np.array([initial_phi for _ in range(2*s*k+1)])
+    initial_approximation = partial(rhs, 0)
+    h = 1/(2*k*s)
+
+    phi = np.array([initial_approximation(i*h) for i in range(2*s*k+1)])
     b_matrix = compute_b_matrix(2*s+1, initial_nodal_points)
 
     for iteration_step in range(number_of_iterations):
-        print(f"Iteration {iteration_step}")
-        phi = approximation_iteration(
+        y = _2ks_iter(
             phi, b_matrix, s, k, lim_0, lim_1
         )
-        print("phi :=", phi)
-        print("mid :=", phi[k*s])
+        for i in range(2*s*k+1):
+            phi[i] = rhs(y[i], i*h)
+
+        if verbose:
+            print("step :=", iteration_step)
+            print("-" * 100)
+            print("y :=", y)
+            print("phi :=", phi)
+            print("mid :=", phi[k*s])
+            print("-" * 100)
+
+    return phi
 
 
 if __name__ == '__main__':
-    approximate(number_of_iterations=1, initial_phi=0, s=2, k=4)
+    def rhs(y, x):
+        return 2*y**2/(1+x)
+
+    two_ks_method_approx(rhs=rhs, number_of_iterations=5, s=2, k=4)
