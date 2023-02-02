@@ -152,8 +152,8 @@ def two_ks_method_approx(
     number_of_iterations=1,
     s=2,
     k=4,
-    lim_0=1/2,
-    lim_1=1/4,
+    lim_0,
+    lim_1,
     verbose=True,
 ):
     initial_nodal_points = compute_initial_nodal_points(s)
@@ -161,6 +161,8 @@ def two_ks_method_approx(
     h = 1/(2*k*s)
 
     phi = np.array([initial_approximation(i*h) for i in range(2*s*k+1)])
+    print("initial_phi := ", phi)
+
     b_matrix = compute_b_matrix(2*s+1, initial_nodal_points)
 
     for iteration_step in range(number_of_iterations):
@@ -185,4 +187,11 @@ if __name__ == '__main__':
     def rhs(y, x):
         return 2*y**2/(1+x)
 
-    two_ks_method_approx(rhs=rhs, number_of_iterations=5, s=2, k=4)
+    two_ks_method_approx(
+        rhs=rhs,
+        number_of_iterations=5,
+        s=2,
+        k=4,
+        lim_0=0,
+        lim_1=1/2
+    )
