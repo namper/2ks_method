@@ -125,7 +125,7 @@ def _2ks_iter(phi, b_matrix, s, k, lim_0, lim_1):
     mid_point = 0.5 * (lim_0 + lim_1) + sigma(b_matrix, phi, k, s)
     y[k*s] = mid_point
 
-    computed_nodes = []
+    computed_nodes = [k*s]
 
     # backwards propagate odd nodes
     # [ <-- mid -- ]
@@ -138,7 +138,7 @@ def _2ks_iter(phi, b_matrix, s, k, lim_0, lim_1):
         y[(t+1)*s] = t/(t+1)*y[t*s] + 1/(t+1)*lim_1 + big_sigma(b_matrix, phi, 2*k-t, s)
         computed_nodes.append((t+1)*s)
 
-    # forwards propagate even nodes
+    # forwards propagate left over nodes
     for t in range(1, 2*k-1):
         for i in range(2, s+2):
 
@@ -163,6 +163,7 @@ def _2ks_iter(phi, b_matrix, s, k, lim_0, lim_1):
     for i in range(2, 2*s+1):
         # for odd nodes skip as they are already propagated
         if ((t-1)*s+i-1) in computed_nodes:
+
             continue
 
         a = (2*s - (i-1)) / (2*s)
@@ -252,7 +253,7 @@ if __name__ == '__main__':
         rhs=rhs,
         lim_0=1,
         lim_1=1/2,
-        number_of_iterations=10,
+        number_of_iterations=2,
         s=S,
         k=K,
     )
