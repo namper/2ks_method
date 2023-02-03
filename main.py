@@ -36,6 +36,8 @@ def compute_b_matrix(s: int):
     nodal_points = compute_initial_nodal_points(s)
 
     b_matrix = np.zeros(shape=(p, p))
+    b_matrix[0] = [None] * p
+    b_matrix[-1] = [None] * p
 
     def integrand_of_poly(poly):
         return lambda x: quad(poly, 0, x)[0]
@@ -43,8 +45,11 @@ def compute_b_matrix(s: int):
     a = 1/nodal_points[p-1]
     b = nodal_points[p-1]
 
-    for i in range(p):
-        for j in range(p):
+    for i in range(1, p-1):
+        b_matrix[i][0] = None
+        b_matrix[i][p-1] = None
+
+        for j in range(1, p-1):
             integrand = integrand_of_poly(
                     lagrangian_polynomial(p, j, nodal_points)
             )
@@ -78,6 +83,7 @@ def sigma(b_matrix, phi, k: int, s: int):
         s2 += a*b
 
     s2 = k * s2
+    print("s2", s2)
 
     s3 = 0
     for t in range(1, k):
@@ -88,6 +94,8 @@ def sigma(b_matrix, phi, k: int, s: int):
             _s += a*b
 
         s3 += t * _s
+
+    print("s3", s3)
 
     return s1 + s2 + s3
 
@@ -117,21 +125,25 @@ def _2ks_iter(phi, b_matrix, s, k, lim_0, lim_1):
     mid_point = 0.5 * (lim_0 + lim_1) + sigma(b_matrix, phi, k, s)
     y[k*s] = mid_point
 
+    computed_nodes = []
+
     # backwards propagate odd nodes
     # [ <-- mid -- ]
     for t in range(k-1, 0, -1):
         y[t*s] = t/(t+1)*y[(t+1)*s] + 1/(t+1)*lim_0 + big_sigma(b_matrix, phi, t, s)
+        computed_nodes.append(t*s)
 
     # forward propagate odd nodes [ -- mid --> ]
     for t in range(k, 2*k-1):
         y[(t+1)*s] = t/(t+1)*y[t*s] + 1/(t+1)*lim_1 + big_sigma(b_matrix, phi, 2*k-t, s)
+        computed_nodes.append((t+1)*s)
 
     # forwards propagate even nodes
     for t in range(1, 2*k-1):
         for i in range(2, s+2):
 
             # for odd nodes skip as they are already propagated
-            if ((t-1)*s+i) % 2 == 1:
+            if ((t-1)*s+i-1) in computed_nodes:
                 continue
 
             a = (2*s - (i-1)) / (2*s)
@@ -150,7 +162,7 @@ def _2ks_iter(phi, b_matrix, s, k, lim_0, lim_1):
     t = 2*k-1
     for i in range(2, 2*s+1):
         # for odd nodes skip as they are already propagated
-        if ((t-1)*s+i) % 2 == 1:
+        if ((t-1)*s+i-1) in computed_nodes:
             continue
 
         a = (2*s - (i-1)) / (2*s)
@@ -175,9 +187,9 @@ def two_ks_method_approx(
     rhs: RHS,
     lim_0,
     lim_1,
-    number_of_iterations=1,
-    s=2,
-    k=4,
+    number_of_iterations,
+    s,
+    k,
     verbose=True,
 ):
     b_matrix = compute_b_matrix(s)
@@ -187,6 +199,7 @@ def two_ks_method_approx(
     h = 1/(2*k*s)
 
     phi = np.array([initial_approximation(i*h) for i in range(2*s*k+1)])
+
     y = np.array([initial_approximation(i*h) for i in range(2*s*k+1)])
     print("initial_phi := ", phi)
 
@@ -198,12 +211,14 @@ def two_ks_method_approx(
             phi[i] = rhs(y[i], i*h)
 
         if verbose:
-            print("step :=", iteration_step)
+            error = get_abs_s_errror(y, s=S, k=K)
+
             print("-" * 100)
+            print("step :=", iteration_step)
             print("y :=", y)
             print("phi :=", phi)
             print("mid :=", phi[k*s])
-            print("-" * 100)
+            print("error :=", error)
 
     return y
 
@@ -226,17 +241,18 @@ if __name__ == '__main__':
     def rhs(y, x):
         return 2*y**2/(1+x)
 
-    S = 5
-    K = 20
+    S = 4
+    K = 5
+
+    def print(*args):
+        __builtins__.print(*("%.5f" % a if isinstance(a, float) else a
+                             for a in args))
 
     y = two_ks_method_approx(
         rhs=rhs,
         lim_0=1,
         lim_1=1/2,
-        number_of_iterations=20,
+        number_of_iterations=10,
         s=S,
         k=K,
     )
-
-    error = get_abs_s_errror(y, s=S, k=K)
-    print("error :=", error)
