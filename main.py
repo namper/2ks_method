@@ -31,7 +31,7 @@ def compute_initial_nodal_points(s: int) -> list[int]:
     return np.fromfunction(lambda _, j: j*h, (1, p), dtype=float)[0]
 
 
-def compute_b_matrix(s: int):
+def compute_b_matrix(s: int, k: int):
     p = 2*s+1
     nodal_points = compute_initial_nodal_points(s)
 
@@ -58,7 +58,7 @@ def compute_b_matrix(s: int):
             d = nodal_points[i]
             e = quad(integrand, 0, nodal_points[p-1])[0]
 
-            b_matrix[i][j] = a * (b*c - d*e)
+            b_matrix[i][j] = a * (b*c - d*e) / k**2
 
     return b_matrix
 
@@ -193,7 +193,7 @@ def two_ks_method_approx(
     k,
     verbose=True,
 ):
-    b_matrix = compute_b_matrix(s)
+    b_matrix = compute_b_matrix(s, k)
     print("b_matrix :=", b_matrix)
 
     initial_approximation = partial(rhs, 0)
@@ -243,7 +243,7 @@ if __name__ == '__main__':
         return 2*y**2/(1+x)
 
     S = 4
-    K = 5
+    K = 10
 
     def print(*args):
         __builtins__.print(*("%.5f" % a if isinstance(a, float) else a
@@ -253,7 +253,7 @@ if __name__ == '__main__':
         rhs=rhs,
         lim_0=1,
         lim_1=1/2,
-        number_of_iterations=2,
+        number_of_iterations=200,
         s=S,
         k=K,
     )
