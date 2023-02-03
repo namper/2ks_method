@@ -1,4 +1,5 @@
-from typing import Callable, TypeAlias, TypeVar
+from typing import Callable, TypeAlias
+
 import numpy as np
 from scipy.integrate import quad
 from functools import partial
@@ -59,9 +60,9 @@ def sigma(b_matrix, phi, k: int, s: int):
     """computes sigma at ks+1 """
 
     s1 = 0
-    for t in range(1, k-1):
+    for t in range(1, k):
         _s = 0
-        for j in range(1, 2*s-1):
+        for j in range(1, 2*s):
             a = b_matrix[s][j]
             b = phi[(t-1)*s+j]
             _s += a*b
@@ -69,9 +70,9 @@ def sigma(b_matrix, phi, k: int, s: int):
         s1 += t * _s
 
     s2 = 0
-    for j in range(1, 2*s-1):
-        a = b_matrix[s][j-1]
-        b = phi[(k-1)*s+j-1]
+    for j in range(1, 2*s):
+        a = b_matrix[s][j]
+        b = phi[(k-1)*s+j]
         s2 += a*b
 
     s2 = k * s2
@@ -79,7 +80,7 @@ def sigma(b_matrix, phi, k: int, s: int):
     s3 = 0
     for t in range(1, k-1):
         _s = 0
-        for j in range(1, 2*s-1):
+        for j in range(1, 2*s):
             a = b_matrix[s][j]
             b = phi[(2*k-1-t)*s+j]
             _s += a*b
@@ -149,11 +150,11 @@ RHS: TypeAlias = Callable[[float, float], float]
 
 def two_ks_method_approx(
     rhs: RHS,
+    lim_0,
+    lim_1,
     number_of_iterations=1,
     s=2,
     k=4,
-    lim_0,
-    lim_1,
     verbose=True,
 ):
     initial_nodal_points = compute_initial_nodal_points(s)
@@ -189,9 +190,9 @@ if __name__ == '__main__':
 
     two_ks_method_approx(
         rhs=rhs,
+        lim_0=0,
+        lim_1=1/2,
         number_of_iterations=5,
         s=2,
         k=4,
-        lim_0=0,
-        lim_1=1/2
     )
