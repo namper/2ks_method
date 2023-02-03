@@ -5,15 +5,15 @@ from scipy.integrate import quad
 from functools import partial
 
 
-def lagrangian_polynomial(p: int, j: int, nodal_points: np.ndarray) -> Callable[[float], float]:
+def lagrangian_polynomial(p: int, j: int, nodal_points: list) -> Callable[[float], float]:
 
     def sub_f(i: int, j: int):
-        return lambda x: (x-nodal_points[i-1])/(nodal_points[j] - nodal_points[i])
+        return lambda x: (x-nodal_points[i])/(nodal_points[j] - nodal_points[i])
 
     def poly(x: float):
         prod = 1
 
-        for i in range(1, p-2):
+        for i in range(1, p-1):
             if i == j:
                 continue
 
@@ -31,7 +31,9 @@ def compute_initial_nodal_points(s: int) -> list[int]:
     return np.fromfunction(lambda _, j: j*h, (1, p), dtype=float)[0]
 
 
-def compute_b_matrix(p: int, nodal_points):
+def compute_b_matrix(s: int):
+    p = 2*s+1
+    nodal_points = compute_initial_nodal_points(s)
 
     b_matrix = np.zeros(shape=(p, p))
 
@@ -47,7 +49,7 @@ def compute_b_matrix(p: int, nodal_points):
                     lagrangian_polynomial(p, j, nodal_points)
             )
 
-            c = quad(integrand, 0, nodal_points[i-1])[0]
+            c = quad(integrand, 0, nodal_points[i])[0]
             d = nodal_points[i]
             e = quad(integrand, 0, nodal_points[p-1])[0]
 
@@ -78,7 +80,7 @@ def sigma(b_matrix, phi, k: int, s: int):
     s2 = k * s2
 
     s3 = 0
-    for t in range(1, k-1):
+    for t in range(1, k):
         _s = 0
         for j in range(1, 2*s):
             a = b_matrix[s][j]
@@ -95,11 +97,11 @@ def big_sigma(b_matrix, phi, t: int, s: int):
 
     sigm = 0
 
-    for r in range(1, t):
-        _s = 0
-        for j in range(1, 2*s-1):
+    for r in range(1, t+1):
+        _s: int = 0
+        for j in range(1, 2*s):
             b = b_matrix[s][j]
-            c = phi[(2*s-1)*s+j]
+            c = phi[(t-1)*s+j]
             _s = b * c
 
         sigm += r * _s
@@ -116,18 +118,20 @@ def _2ks_iter(phi, b_matrix, s, k, lim_0, lim_1):
     y[k*s] = mid_point
 
     # backwards propagate odd nodes
-    for t in range(2*k-1, 0, -1):
+    # [ <-- mid -- ]
+    for t in range(k-1, 0, -1):
         y[t*s] = t/(t+1)*y[(t+1)*s] + 1/(t+1)*lim_0 + big_sigma(b_matrix, phi, t, s)
+
+    # forward propagate odd nodes [ -- mid --> ]
+    for t in range(k, 2*k-1):
+        y[(t+1)*s] = t/(t+1)*y[t*s] + 1/(t+1)*lim_1 + big_sigma(b_matrix, phi, 2*k-t, s)
 
     # forwards propagate even nodes
     for t in range(1, 2*k-1):
         for i in range(2, s+2):
+
             # for odd nodes skip as they are already propagated
             if ((t-1)*s+i) % 2 == 1:
-                continue
-
-            # skip out of bounds
-            if (t == 2*k - 2) and (i == s+1):
                 continue
 
             a = (2*s - (i-1)) / (2*s)
@@ -137,10 +141,29 @@ def _2ks_iter(phi, b_matrix, s, k, lim_0, lim_1):
             d = y[(t+1)*s]
 
             e = 0
-            for j in range(2, 2*s):
+            for j in range(2, 2*s+1):
                 e += b_matrix[i-1][j-1]*phi[(t-1)*s+j-1]
 
             y[(t-1)*s+i-1] = a*b + c*d + e
+
+    # CASE WHEN T = 2K - 1
+    t = 2*k-1
+    for i in range(2, 2*s+1):
+        # for odd nodes skip as they are already propagated
+        if ((t-1)*s+i) % 2 == 1:
+            continue
+
+        a = (2*s - (i-1)) / (2*s)
+        b = y[(t-1)*s]
+
+        c = (i-1)/(2*s)
+        d = y[(t+1)*s]
+
+        e = 0
+        for j in range(2, 2*s+1):
+            e += b_matrix[i-1][j-1]*phi[(t-1)*s+j-1]
+
+        y[(t-1)*s+i-1] = a*b + c*d + e
 
     return y
 
@@ -157,16 +180,17 @@ def two_ks_method_approx(
     k=4,
     verbose=True,
 ):
-    initial_nodal_points = compute_initial_nodal_points(s)
+    b_matrix = compute_b_matrix(s)
+    print("b_matrix :=", b_matrix)
+
     initial_approximation = partial(rhs, 0)
     h = 1/(2*k*s)
 
     phi = np.array([initial_approximation(i*h) for i in range(2*s*k+1)])
+    y = np.array([initial_approximation(i*h) for i in range(2*s*k+1)])
     print("initial_phi := ", phi)
 
-    b_matrix = compute_b_matrix(2*s+1, initial_nodal_points)
-
-    for iteration_step in range(number_of_iterations):
+    for iteration_step in range(1, number_of_iterations+1):
         y = _2ks_iter(
             phi, b_matrix, s, k, lim_0, lim_1
         )
@@ -181,18 +205,38 @@ def two_ks_method_approx(
             print("mid :=", phi[k*s])
             print("-" * 100)
 
-    return phi
+    return y
+
+
+def get_abs_s_errror(y, k, s):
+
+    def sol(x):
+        return 1/(1+x)
+
+    solution = np.fromfunction(
+        lambda _, y: sol(y),
+        (1, 2*k*s+1),
+        dtype=float
+    )[0]
+
+    return np.average(np.abs(y[1:2*k*s] - solution[1:2*k*s]))
 
 
 if __name__ == '__main__':
     def rhs(y, x):
         return 2*y**2/(1+x)
 
-    two_ks_method_approx(
+    S = 5
+    K = 20
+
+    y = two_ks_method_approx(
         rhs=rhs,
-        lim_0=0,
+        lim_0=1,
         lim_1=1/2,
-        number_of_iterations=5,
-        s=2,
-        k=4,
+        number_of_iterations=20,
+        s=S,
+        k=K,
     )
+
+    error = get_abs_s_errror(y, s=S, k=K)
+    print("error :=", error)
