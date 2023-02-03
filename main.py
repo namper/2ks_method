@@ -117,6 +117,23 @@ def big_sigma(b_matrix, phi, t: int, s: int):
     return a * sigm
 
 
+def big_sigma_2(b_matrix, phi, t: int, s: int, k: int):
+    a = 2 / (t + 1)
+
+    sigm = 0
+
+    for r in range(1, t+1):
+        _s: int = 0
+        for j in range(1, 2*s):
+            b = b_matrix[s][j]
+            c = phi[(2*k-t-1)*s+j]
+            _s = b * c
+
+        sigm += r * _s
+
+    return a * sigm
+
+
 def _2ks_iter(phi, b_matrix, s, k, lim_0, lim_1):
     # setup y
     y = np.zeros(shape=2*s*k+1, dtype=float)
@@ -135,7 +152,7 @@ def _2ks_iter(phi, b_matrix, s, k, lim_0, lim_1):
 
     # forward propagate odd nodes [ -- mid --> ]
     for t in range(k, 2*k-1):
-        y[(t+1)*s] = t/(t+1)*y[t*s] + 1/(t+1)*lim_1 + big_sigma(b_matrix, phi, 2*k-t, s)
+        y[(t+1)*s] = t/(t+1)*y[t*s] + 1/(t+1)*lim_1 + big_sigma_2(b_matrix, phi, t, s, k)
         computed_nodes.append((t+1)*s)
 
     # forwards propagate left over nodes
@@ -244,10 +261,6 @@ if __name__ == '__main__':
 
     S = 4
     K = 10
-
-    def print(*args):
-        __builtins__.print(*("%.5f" % a if isinstance(a, float) else a
-                             for a in args))
 
     y = two_ks_method_approx(
         rhs=rhs,
