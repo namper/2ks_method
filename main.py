@@ -27,7 +27,6 @@ def lagrangian_polynomial(p: int, j: int, nodal_points: list) -> Callable[[float
 def compute_initial_nodal_points(s: int) -> list[int]:
     p = 2*s+1
     h = 1/(p-1)
-
     return np.fromfunction(lambda _, j: j*h, (1, p), dtype=float)[0]
 
 
@@ -83,7 +82,6 @@ def sigma(b_matrix, phi, k: int, s: int):
         s2 += a*b
 
     s2 = k * s2
-    print("s2", s2)
 
     s3 = 0
     for t in range(1, k):
@@ -94,8 +92,6 @@ def sigma(b_matrix, phi, k: int, s: int):
             _s += a*b
 
         s3 += t * _s
-
-    print("s3", s3)
 
     return s1 + s2 + s3
 
@@ -109,7 +105,7 @@ def big_sigma(b_matrix, phi, t: int, s: int):
         _s: int = 0
         for j in range(1, 2*s):
             b = b_matrix[s][j]
-            c = phi[(t-1)*s+j]
+            c = phi[(r-1)*s+j]
             _s = b * c
 
         sigm += r * _s
@@ -126,7 +122,7 @@ def big_sigma_2(b_matrix, phi, t: int, s: int, k: int):
         _s: int = 0
         for j in range(1, 2*s):
             b = b_matrix[s][j]
-            c = phi[(2*k-t-1)*s+j]
+            c = phi[(2*k-r-1)*s+j]
             _s = b * c
 
         sigm += r * _s
@@ -151,9 +147,9 @@ def _2ks_iter(phi, b_matrix, s, k, lim_0, lim_1):
         computed_nodes.append(t*s)
 
     # forward propagate odd nodes [ -- mid --> ]
-    for t in range(k, 2*k-1):
-        y[(t+1)*s] = t/(t+1)*y[t*s] + 1/(t+1)*lim_1 + big_sigma_2(b_matrix, phi, t, s, k)
-        computed_nodes.append((t+1)*s)
+    for t in range(k-1, 0, -1):
+        y[(2*k-t)*s] = t/(t+1)*y[(2*k-t-1)*s] + 1/(t+1)*lim_1 + big_sigma_2(b_matrix, phi, t, s, k)
+        computed_nodes.append((2*k-t+1)*s)
 
     # forwards propagate left over nodes
     for t in range(1, 2*k-1):
@@ -170,8 +166,8 @@ def _2ks_iter(phi, b_matrix, s, k, lim_0, lim_1):
             d = y[(t+1)*s]
 
             e = 0
-            for j in range(2, 2*s+1):
-                e += b_matrix[i-1][j-1]*phi[(t-1)*s+j-1]
+            for j in range(1, 2*s):
+                e += b_matrix[i-1][j]*phi[(t-1)*s+j-1]
 
             y[(t-1)*s+i-1] = a*b + c*d + e
 
@@ -190,8 +186,8 @@ def _2ks_iter(phi, b_matrix, s, k, lim_0, lim_1):
         d = y[(t+1)*s]
 
         e = 0
-        for j in range(2, 2*s+1):
-            e += b_matrix[i-1][j-1]*phi[(t-1)*s+j-1]
+        for j in range(1, 2*s):
+            e += b_matrix[i-1][j]*phi[(t-1)*s+j-1]
 
         y[(t-1)*s+i-1] = a*b + c*d + e
 
@@ -259,14 +255,14 @@ if __name__ == '__main__':
     def rhs(y, x):
         return 2*y**2/(1+x)
 
-    S = 4
-    K = 10
+    S = 1
+    K = 20
 
     y = two_ks_method_approx(
         rhs=rhs,
         lim_0=1,
         lim_1=1/2,
-        number_of_iterations=200,
+        number_of_iterations=20,
         s=S,
         k=K,
     )
