@@ -242,9 +242,10 @@ def get_abs_s_errror(y, k, s):
     def sol(x):
         return 1/(1+x)
 
+    h = 1/(2*k*s)
     solution = np.fromfunction(
-        lambda _, y: sol(y),
-        (1, 2*k*s+1),
+        lambda _, i: sol(h*i),
+        (1, 2*k*s),
         dtype=float
     )[0]
 
