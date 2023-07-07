@@ -9,11 +9,8 @@ MA = 1  # 10 ** 5
 
 
 def lagrangian_polynomial(
-    p: int,
-    j: int,
-    nodal_points: list
+    p: int, j: int, nodal_points: list
 ) -> Callable[[float], float]:
-
     def sub_f(i: int, j: int):
         return lambda x: (x - nodal_points[i]) / (nodal_points[j] - nodal_points[i])
 
@@ -55,7 +52,7 @@ def compute_b_matrix(s: int, k: int):
         b_matrix[i][0] = None
         b_matrix[i][p - 1] = None
 
-        for j in range(1, p-1):
+        for j in range(1, p - 1):
             integrand = integrand_of_poly(lagrangian_polynomial(p, j, nodal_points))
 
             c = quad(integrand, 0, nodal_points[i])[0]
@@ -67,7 +64,7 @@ def compute_b_matrix(s: int, k: int):
     return b_matrix
 
 
-def compute_c_matrix(s: int):
+def compute_c_matrix(s: int, k: int):
     p = 2 * s + 1
     nodal_points = compute_initial_nodal_points(s)
 
@@ -75,16 +72,16 @@ def compute_c_matrix(s: int):
 
     def integrand_of_poly(poly):
         return lambda x: quad(poly, nodal_points[i], x)[0]
-    for i in range(0, p):
 
-        for j in range(1, p-1):
+    for i in range(0, p):
+        for j in range(1, p - 1):
             integrand = integrand_of_poly(lagrangian_polynomial(p, j, nodal_points))
 
             full_integral = quad(integrand, 0, 1)[0]
 
             c_matrix[i][j] = full_integral
 
-    return c_matrix
+    return c_matrix / k**2
 
 
 def sigma(b_matrix, phi, k: int, s: int):
@@ -94,7 +91,7 @@ def sigma(b_matrix, phi, k: int, s: int):
     for t in range(1, k):
         _s = 0
         for j in range(2, 2 * s + 1):
-            a = b_matrix[s][j-1]
+            a = b_matrix[s][j - 1]
             b = phi[(t - 1) * s + j - 1]
             _s += a * b
 
@@ -103,7 +100,7 @@ def sigma(b_matrix, phi, k: int, s: int):
 
     s2 = 0
     for j in range(2, 2 * s + 1):
-        a = b_matrix[s][j-1]
+        a = b_matrix[s][j - 1]
         b = phi[(k - 1) * s + j - 1]
         s2 += a * b
 
@@ -114,7 +111,7 @@ def sigma(b_matrix, phi, k: int, s: int):
     for t in range(1, k):
         _s = 0
         for j in range(2, 2 * s + 1):
-            a = b_matrix[s][j-1]
+            a = b_matrix[s][j - 1]
             b = phi[(2 * k - 1 - t) * s + j - 1]
             _s += a * b
 
@@ -133,7 +130,7 @@ def big_sigma(b_matrix, phi, t: int, s: int):
     for r in range(1, t + 1):
         _s: int = 0
         for j in range(2, 2 * s + 1):
-            b = b_matrix[s][j-1]
+            b = b_matrix[s][j - 1]
             c = phi[(r - 1) * s + j - 1]
             _s = b * c
 
@@ -164,9 +161,7 @@ def _2ks_iter(phi, b_matrix, s, k, lim_0, lim_1):
     y = np.zeros(shape=2 * s * k + 1, dtype=float)
     y[0] = lim_0
     y[-1] = lim_1
-    mid_point = 0.5 * (lim_0 + lim_1) + sigma(b_matrix, phi, k, s)
-    y[k * s] = mid_point
-
+    y[k * s] = 0.5 * (lim_0 + lim_1) + sigma(b_matrix, phi, k, s)
     computed_nodes = [k * s]
 
     # backwards propagate odd nodes
@@ -229,6 +224,61 @@ def _2ks_iter(phi, b_matrix, s, k, lim_0, lim_1):
     return y
 
 
+def compute_differentials(
+    s: int,
+    k: int,
+    lim_0: float,
+    lim_1: float,
+    phi,
+    b_matrix,
+    c_matrix,
+):
+    y_diff = np.array([np.nan for _ in range(0, 2 * s * k + 2)])
+
+    sum_1 = 0
+    for r in range(1, k):
+        _s = 0
+        for j in range(2, 2 * s + 1):
+            _s += b_matrix[s][j - 1] * (
+                phi[(2 * k - r - 1) * s + j - 1] - phi[(r - 1) * s + j - 1]
+            )
+        sum_1 += float(r) * _s
+
+    for i in range(1, 2 * s + 2):
+        sum_2 = 0
+        for j in range(2, 2 * s + 1):
+            sum_2 += c_matrix[i - 1][j - 1] * phi[(k - 1) * s + j - 1]
+
+        sum_2 = k * sum_2
+        y_diff[(k - 1) * s + i - 1] = lim_1 - lim_0 + 2 * sum_1 - sum_2
+
+    return y_diff
+
+
+def newton_cotes(k: int, s: int, y_diff):
+    h = 1 / (2 * k * s)
+
+    def newton_4(f1, f2, f3, f4):
+        return 5 / 24 * h * (11 * f1 + f2 + f3 + 11 * f4)
+
+    right = (k + 1) * s
+    left = (k - 1) * s
+
+    # Right propagate -->
+    for i in range(right + 1, 2 * k * s + 2):
+        y_diff[i] = y_diff[i - 4] + newton_4(
+            y_diff[i - 4], y_diff[i - 3], y_diff[i - 2], y_diff[i - 1]
+        )
+
+    # Left propagate <--
+    for i in range(left - 1, -1, -1):
+        y_diff[i] = y_diff[i + 4] + newton_4(
+            y_diff[i + 4], y_diff[i + 3], y_diff[i + 2], y_diff[i + 1]
+        )
+
+    return y_diff
+
+
 RHS: TypeAlias = Callable[[float, float], float]
 
 
@@ -244,10 +294,10 @@ def two_ks_method_approx(
     b_matrix = compute_b_matrix(s, k)
     print("b_matrix :=", b_matrix)
 
-    c_matrix = compute_c_matrix(s)
+    c_matrix = compute_c_matrix(s, k)
     print("c_matrix :=", c_matrix)
 
-    initial_approximation = partial(rhs, 0)
+    initial_approximation = partial(rhs, 1)
     h = 1 / (2 * k * s)
 
     phi = np.array([initial_approximation(i * h) for i in range(2 * s * k + 1)])
@@ -270,6 +320,12 @@ def two_ks_method_approx(
             print("error :=", error)
             print("max :=", np.max(error))
 
+    diffs = compute_differentials(s, k, lim_0, lim_1, phi, b_matrix, c_matrix)
+    diffs = newton_cotes(k, s, diffs)
+    diff_error = get_diff_errror(diffs, s=S, k=K)
+    print("diffs := ", diffs)
+    print("diff error:= ", diff_error)
+
     return y
 
 
@@ -279,7 +335,18 @@ def get_s_errror(y, k, s):
 
     h = 1 / (2 * k * s)
     solution = np.fromfunction(lambda _, i: sol(h * i), (1, 2 * k * s), dtype=float)[0]
-    return np.abs(y[1:2 * k * s] - solution[1:2 * k * s]) / MA
+    return np.abs(y[1 : 2 * k * s] - solution[1 : 2 * k * s]) / MA
+
+
+def get_diff_errror(y, k, s):
+    def sol(x):
+        return -1 / (1 + x) ** 2
+
+    h = 1 / (2 * k * s)
+    solution = np.fromfunction(
+        lambda _, i: sol(h * i), (1, 2 * k * s + 2), dtype=float
+    )[0]
+    return np.abs(y[0 : 2 * k * s + 2] - solution[0 : 2 * k * s + 2]) / MA
 
 
 if __name__ == "__main__":
@@ -287,8 +354,8 @@ if __name__ == "__main__":
     def rhs(y, x):
         return 2 * y**2 / (1 + x)
 
-    S = 3
-    K = 20
+    S = 2
+    K = 2
 
     y = two_ks_method_approx(
         rhs=rhs,
