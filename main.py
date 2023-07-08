@@ -181,7 +181,7 @@ def _2ks_iter(phi, b_matrix, s, k, lim_0, lim_1):
             + 1 / (t + 1) * lim_1
             + big_sigma_2(b_matrix, phi, t, s, k)
         )
-        computed_nodes.append((2 * k - t + 1) * s)
+        computed_nodes.append((2 * k - t) * s)
 
     # forwards propagate left over nodes
     for t in range(1, 2 * k - 1):
@@ -249,10 +249,10 @@ def compute_differentials(
         for j in range(2, 2 * s + 1):
             sum_2 += c_matrix[i - 1][j - 1] * phi[(k - 1) * s + j - 1]
 
-        sum_2 = k * sum_2
+        sum_2 = float(k) * sum_2
         y_diff[(k - 1) * s + i - 1] = lim_1 - lim_0 + 2 * sum_1 - sum_2
 
-    return y_diff
+    return newton_cotes(k, s, y_diff)
 
 
 def newton_cotes(k: int, s: int, y_diff):
@@ -264,22 +264,23 @@ def newton_cotes(k: int, s: int, y_diff):
     right = (k + 1) * s
     left = (k - 1) * s
 
-    # Right propagate -->
+    # Right propagate --> I_x_4^x_8 = y(x_8) =  y(x_4) + newton
     for i in range(right + 1, 2 * k * s + 2):
         y_diff[i] = y_diff[i - 4] + newton_4(
             y_diff[i - 4], y_diff[i - 3], y_diff[i - 2], y_diff[i - 1]
         )
 
-    # Left propagate <--
+    # Left propagate <-- I_x_3^x_7 = y(x_3) =  y(x_7) - newton
     for i in range(left - 1, -1, -1):
-        y_diff[i] = y_diff[i + 4] + newton_4(
+        y_diff[i] = y_diff[i + 4] - newton_4(
             y_diff[i + 4], y_diff[i + 3], y_diff[i + 2], y_diff[i + 1]
         )
 
     return y_diff
 
 
-RHS: TypeAlias = Callable[[float, float], float]
+RHS: TypeAlias = Callable[[float, float, float], float]
+Sol: TypeAlias = Callable[[float], float]
 
 
 def two_ks_method_approx(
@@ -289,6 +290,8 @@ def two_ks_method_approx(
     number_of_iterations: int,
     s: int,
     k: int,
+    u: Sol,
+    u_diff: Sol,
     verbose: bool = True,
 ):
     b_matrix = compute_b_matrix(s, k)
@@ -297,21 +300,22 @@ def two_ks_method_approx(
     c_matrix = compute_c_matrix(s, k)
     print("c_matrix :=", c_matrix)
 
-    initial_approximation = partial(rhs, 1)
+    initial_approximation = partial(rhs, 1, 1)
     h = 1 / (2 * k * s)
 
     phi = np.array([initial_approximation(i * h) for i in range(2 * s * k + 1)])
-
     y = np.array([initial_approximation(i * h) for i in range(2 * s * k + 1)])
+    y_diff = np.array([u_diff(0) for _ in range(2*s*k+2)])
     print("initial_phi := ", phi)
 
     for iteration_step in range(1, number_of_iterations + 1):
         y = _2ks_iter(phi, b_matrix, s, k, lim_0, lim_1)
         for i in range(2 * s * k + 1):
-            phi[i] = rhs(y[i], i * h)
+            phi[i] = rhs(y[i], i * h, y_diff[i])
+        y_diff = compute_differentials(s, k, lim_0, lim_1, phi, b_matrix, c_matrix)
 
         if verbose:
-            error = get_s_errror(y, s=S, k=K)
+            error = get_s_errror(y, s=S, k=K, sol=u)
             print("-" * 100)
             print("step :=", iteration_step)
             print("y :=", y)
@@ -320,28 +324,21 @@ def two_ks_method_approx(
             print("error :=", error)
             print("max :=", np.max(error))
 
-    diffs = compute_differentials(s, k, lim_0, lim_1, phi, b_matrix, c_matrix)
-    diffs = newton_cotes(k, s, diffs)
-    diff_error = get_diff_errror(diffs, s=S, k=K)
-    print("diffs := ", diffs)
-    print("diff error:= ", diff_error)
+        print("diffs := ", y_diff)
+        print("diff error:= ", get_diff_errror(y_diff, k, s, sol=u_diff))
+        print("diff max:= ", np.average(get_diff_errror(y_diff, k, s, sol=u_diff)))
 
     return y
 
 
-def get_s_errror(y, k, s):
-    def sol(x):
-        return 1 / (1 + x)
-
+def get_s_errror(y, k, s, sol: Sol):
     h = 1 / (2 * k * s)
     solution = np.fromfunction(lambda _, i: sol(h * i), (1, 2 * k * s), dtype=float)[0]
+
     return np.abs(y[1 : 2 * k * s] - solution[1 : 2 * k * s]) / MA
 
 
-def get_diff_errror(y, k, s):
-    def sol(x):
-        return -1 / (1 + x) ** 2
-
+def get_diff_errror(y, k, s, sol: Sol):
     h = 1 / (2 * k * s)
     solution = np.fromfunction(
         lambda _, i: sol(h * i), (1, 2 * k * s + 2), dtype=float
@@ -351,17 +348,35 @@ def get_diff_errror(y, k, s):
 
 if __name__ == "__main__":
 
-    def rhs(y, x):
-        return 2 * y**2 / (1 + x)
+    def rhs(y, x, y_d):
+        return x - y_d + x**2 / 2 - 1 / 6
+
+    def rhs_2(y, x, y_d):
+        return -y * y_d + y**3
+
+    def u2(x):
+        return 1/(x+4)
+
+    def u2_diff(x):
+        return -(1/(x+4))**2
 
     S = 2
     K = 2
 
+    def u(x):
+        return 1 / 6 * x**3 - 1 / 6 * x
+
+    def u_diff(x):
+        return 1 / 2 * x**2 - 1 / 6
+
     y = two_ks_method_approx(
         rhs=rhs,
-        lim_0=1,
-        lim_1=1 / 2,
-        number_of_iterations=10,
+        lim_0=0,
+        lim_1=0,
+        number_of_iterations=3,
         s=S,
         k=K,
+        u=u,
+        u_diff=u_diff,
+        verbose=False
     )
